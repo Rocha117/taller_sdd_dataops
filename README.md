@@ -124,7 +124,7 @@ Así nadie (ni tu asistente) puede subir cambios directo a `main`.
 
 1. En tu repo: **Settings → Branches → Add branch ruleset** (o *Add rule*).
 2. Aplícalo a la rama `main` y activa:
-   - **Require a pull request before merging**.
+   - **Require a pull request before merging**, con **Required approvals = 0**. Así el Pull Request no espera que otra persona lo apruebe: lo que lo bloquea o lo deja pasar son los stages del pipeline. (Si trabajas en pareja, puedes subirlo a 1 para que tu compañero/a revise la spec.)
    - **Require status checks to pass**. Los checks del pipeline aparecen aquí después de su primera ejecución; vuelve a este paso para marcarlos.
 3. Guarda la regla.
 
@@ -140,7 +140,7 @@ Así nadie (ni tu asistente) puede subir cambios directo a `main`.
 4. El asistente **te hará preguntas antes de escribir**. Respóndelas pensando como el dueño del dato desde el punto de vista de negocio
 5. Revisa los tres archivos que crea en `constitucion/`. Si algo no te convence, pídele que lo corrija. **Tú apruebas la spec, no el asistente.**
 
-✅ Checkpoint: existen `constitucion/mision.md`, `constitucion/stack-tecnologico.md` y `constitucion/roadmap.md`, y el roadmap tiene una fase por cada etapa del ciclo del dato.
+✅ Checkpoint: existen `constitucion/mision.md`, `constitucion/stack-tecnologico.md` y `constitucion/roadmap.md`, y el roadmap tiene 2 fases que, juntas, cubren todo el ciclo del dato.
 
 Guarda tu avance:
 
@@ -194,9 +194,9 @@ Ejecuta lo que dice `validacion.md` (por ejemplo, las consultas en el SQL Editor
 
 ✅ Checkpoint: cada criterio de `validacion.md` está marcado como cumplido.
 
-### 8. Repite por cada fase
+### 8. Repite con la fase 2
 
-Vuelve al paso 5 con la siguiente fase del roadmap hasta completar el ciclo del dato: Diseño (modelado), Test shift-left, Build, Deploy y Monitoring. Cada fase tiene su propia rama y su propio Pull Request.
+Vuelve al paso 5 con la fase 2 del roadmap. Son solo dos fases: la **fase 1** (diseño, modelado y calidad shift-left) y la **fase 2** (pipeline de punta a punta: Bronze, calidad y rechazados, Gold y monitoreo). Cada una tiene su propia rama y su propio Pull Request. Al terminar la fase 2, el pipeline completo corre con solo tus 3 secrets.
 
 ---
 

@@ -45,6 +45,9 @@ feature. Crea estos tres archivos en español:
         rechazos superan el umbral que defina la spec, el stage falla.
      5. Gold: métricas para el negocio.
      6. Monitoreo: cada stage deja registro de su ejecución.
+   - Listo para ejecutar: al terminar las dos fases, el repo debe correr de
+     punta a punta con solo configurar los 3 secrets de GitHub. Cada script
+     debe quedar documentado en el README (qué hace y en qué stage corre).
    - Restricciones de gobierno y calidad: datos personales (email), quién puede
      ver qué, reglas mínimas de calidad y trazabilidad de cada ejecución.
    - Para cada herramienta, indica una alternativa equivalente (comercial u
@@ -52,13 +55,12 @@ feature. Crea estos tres archivos en español:
      práctica que cubre.
 
 3. constitucion/roadmap.md
-   - Fases pequeñas, en orden, que recorran todo el ciclo del dato:
-     Diseño (modelado y creación de tablas) → Test shift-left (calidad en el
-     Pull Request) → Build (Bronze, Silver + rechazados, Gold) → Deploy
-     (merge a main solo en verde) → Monitoring.
+   - Solo DOS fases, en este orden, que juntas recorran todo el ciclo del dato:
+     Fase 1 · Diseño y calidad shift-left: modelo lógico y físico, creación de
+       las tablas en Databricks y validación del archivo en el Pull Request.
+     Fase 2 · Pipeline de punta a punta: ingesta a Bronze, calidad de datos
+       (Silver + rechazados), Gold y monitoreo, con merge a main solo en verde.
    - Cada fase con: objetivo en una línea, qué entrega y de qué fase depende.
-   - Ninguna fase debe ser tan grande que no se pueda construir y validar en
-     una sola sesión de trabajo.
 
 Reglas:
 - ANTES de escribir cualquier archivo, hazme todas las preguntas que necesites,
@@ -72,7 +74,7 @@ Reglas:
 
 **¿Qué completamos juntos en clase?** Antes de pegar el prompt, llenamos la sección "Lo que completamos en clase" de [`negocio/input-negocio.md`](negocio/input-negocio.md): la meta del indicador, qué registro manda ante un duplicado y qué pasa si falla una regla de calidad. También conviene detectar en grupo las tensiones: Raúl usa Databricks pero no quiere amarrarse; Andrés quiere el dato a las 8:00 y Patricia no quiere emails en reportes; Raúl quiere detectar errores en el Pull Request y Patricia quiere que los rechazados se guarden aparte.
 
-✅ **Resultado esperado:** tres archivos en `constitucion/` y un roadmap con al menos una fase por cada etapa del ciclo del dato.
+✅ **Resultado esperado:** tres archivos en `constitucion/` y un roadmap con 2 fases que, juntas, cubren todo el ciclo del dato.
 
 ---
 
@@ -126,7 +128,7 @@ Reglas:
 - Al terminar, muéstrame un resumen de los tres archivos para que yo lo apruebe.
 ```
 
-**¿Qué completamos juntos en clase?** Las respuestas a las preguntas del asistente. Para la fase de Build (Bronze → Silver) conviene discutir en grupo:
+**¿Qué completamos juntos en clase?** Las respuestas a las preguntas del asistente. Para definir las reglas de calidad conviene discutir en grupo:
 
 | Pregunta | Qué conversar |
 |---|---|
