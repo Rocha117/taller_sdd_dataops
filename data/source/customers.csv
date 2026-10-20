@@ -1,0 +1,22 @@
+customer_id,name,age,country,email
+C001,Ana Torres,34,PE,ana.torres@mail.com
+C002,Luis Ramírez,28,PE,luis.ramirez@mail.com
+C003,,41,CL,sin.nombre@mail.com
+C004,María Quispe,17,PE,maria.quispe@mail.com
+C005,Jorge Salas,52,CO,jorge.salas@mail
+C006,Carla Mendoza,23,MX,carla.mendoza@mail.com
+C007,Pedro Huamán,39,PE,pedro.huaman@mail.com
+C008,  ,30,PE,espacios@mail.com
+C009,Sofía Rojas,16,AR,sofia.rojas@mail.com
+C010,Diego Castro,45,PE,diego.castro@mail.com
+C010,Diego Castro,45,PE,diego.castro@mail.com
+C011,Valeria Paredes,31,CL,valeria.paredesmail.com
+C012,Andrés Vega,,PE,andres.vega@mail.com
+C013,Lucía Flores,27,CO,lucia.flores@mail.com
+C014,Martín Chávez,63,PE,martin.chavez@mail.com
+C015,Gabriela Ríos,abc,MX,gabriela.rios@mail.com
+C016,Ricardo León,36,,ricardo.leon@mail.com
+C017,Fernanda Soto,29,PE,fernanda.soto@mail.com
+C018,Tomás Aguilar,48,AR,tomas.aguilar@mail.com
+C019,Camila Ortiz,22,PE,
+C020,Héctor Navarro,57,CL,hector.navarro@mail.com
