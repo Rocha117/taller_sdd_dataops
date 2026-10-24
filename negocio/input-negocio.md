@@ -17,6 +17,6 @@
 
 ## Lo que completamos en clase
 
-- ¿Cuál es la meta del indicador de Carmen? (por ejemplo, pasar de X % a Y %): ______
-- Cuando hay un duplicado, ¿cuál registro manda?: ______
-- ¿Qué pasa si una regla de calidad falla un lunes: se detiene la carga o se envía con advertencia?: ______
+- ¿Cuál es la meta del indicador de Carmen? (por ejemplo, pasar de X % a Y %): pasar de 50 % (línea base del archivo actual: 10 de 20 clientes únicos) a 80 % de clientes contactables.
+- Cuando hay un duplicado, ¿cuál registro manda?: el primero que aparece en el archivo. Los siguientes van a la tabla de rechazados con motivo "duplicado".
+- ¿Qué pasa si una regla de calidad falla un lunes: se detiene la carga o se envía con advertencia?: si hay al menos un rechazo, la carga sigue con advertencia; si los rechazos llegan al 50 % o más de las filas, el stage de calidad falla y la carga se detiene. (Primero se propuso 30 %, pero el archivo actual ya tiene 43 % de filas con error y el pipeline nunca pasaría en verde.)
