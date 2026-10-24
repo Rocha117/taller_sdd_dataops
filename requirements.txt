@@ -1,0 +1,3 @@
+# Dependencias del pipeline (versiones fijadas)
+databricks-sql-connector==4.6.0
+pytest==9.0.3

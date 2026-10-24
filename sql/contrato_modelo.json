@@ -1,0 +1,63 @@
+{
+  "descripcion": "Contrato del modelo: tablas, columnas y tipos esperados en {{catalog}}.{{schema}}. Lo verifica scripts/desplegar_modelo.py contra information_schema.columns y tests/test_contrato.py contra sql/ddl/.",
+  "tablas": {
+    "bronze_customers": {
+      "customer_id": "STRING",
+      "name": "STRING",
+      "age": "STRING",
+      "country": "STRING",
+      "email": "STRING",
+      "_run_id": "STRING",
+      "_source_file": "STRING",
+      "_row_number": "INT",
+      "_ingested_at": "TIMESTAMP"
+    },
+    "silver_customers": {
+      "customer_id": "STRING",
+      "name": "STRING",
+      "age": "INT",
+      "country_code": "STRING",
+      "email": "STRING",
+      "es_mayor_edad": "BOOLEAN",
+      "es_contactable": "BOOLEAN",
+      "_run_id": "STRING",
+      "_processed_at": "TIMESTAMP"
+    },
+    "rechazados_customers": {
+      "_run_id": "STRING",
+      "_row_number": "INT",
+      "customer_id": "STRING",
+      "registro_original": "STRING",
+      "motivo": "STRING",
+      "_rejected_at": "TIMESTAMP"
+    },
+    "ref_paises": {
+      "country_code": "STRING",
+      "country_name": "STRING",
+      "region": "STRING"
+    },
+    "gold_contactables_pais": {
+      "country_code": "STRING",
+      "country_name": "STRING",
+      "region": "STRING",
+      "clientes_unicos": "BIGINT",
+      "clientes_contactables": "BIGINT",
+      "pct_contactables": "DECIMAL(5,2)",
+      "_run_id": "STRING",
+      "_updated_at": "TIMESTAMP"
+    },
+    "monitoreo_ejecuciones": {
+      "run_id": "STRING",
+      "stage": "STRING",
+      "estado": "STRING",
+      "filas_entrada": "BIGINT",
+      "filas_salida": "BIGINT",
+      "filas_rechazadas": "BIGINT",
+      "mensaje": "STRING",
+      "trigger": "STRING",
+      "git_sha": "STRING",
+      "started_at": "TIMESTAMP",
+      "finished_at": "TIMESTAMP"
+    }
+  }
+}
