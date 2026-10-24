@@ -206,6 +206,46 @@ Columnas: `customer_id`, `name`, `age`, `country` (código de 2 letras), `email`
 
 El archivo trae a propósito algunos problemas de calidad (nombres vacíos, países vacíos, edades no numéricas, menores de edad, correos mal formados, duplicados). **No los corrijas a mano**: que tu spec diga qué hacer con ellos.
 
+## Scripts del pipeline
+
+Todo lo que corre el workflow [`.github/workflows/pipeline.yml`](.github/workflows/pipeline.yml). Se dispara en cada Pull Request hacia `main` y de forma manual (*Actions → Pipeline ClientesConfiables → Run workflow*). Spec: [`specs/2026-10-23-fase-1-diseno-shift-left/`](specs/2026-10-23-fase-1-diseno-shift-left/).
+
+| Archivo | Qué hace | Stage |
+|---|---|---|
+| `scripts/validar_csv.py` | Valida `data/source/customers.csv` sin tocar Databricks. Bloquea si la estructura está mal (encabezado, UTF-8, archivo vacío, filas incompletas). Los errores por fila solo dan advertencia. Escribe el reporte en el resumen del job y nunca muestra emails | 1 · Calidad shift-left |
+| `scripts/reglas_calidad.py` | Reglas por fila y sus motivos (`nombre_vacio`, `email_invalido`, `duplicado`, etc.). Las usa `validar_csv.py`, y en la Fase 2 el stage de calidad | 1 · Calidad shift-left |
+| `tests/` | Tests de pytest: reglas, chequeos estructurales con `tests/fixtures/`, contrato vs. DDL y manejo de secrets | 1 · Calidad shift-left |
+| `scripts/desplegar_modelo.py` | Ejecuta `sql/ddl/` en orden, carga `ref_paises` con un `MERGE` parametrizado y verifica el modelo contra `sql/contrato_modelo.json` | 2 · Despliegue del modelo |
+| `scripts/db.py` | Conexión a Databricks con los 3 secrets, destino (`workspace.demo` por defecto) y `run_id` | 2 · Despliegue del modelo |
+| `sql/ddl/01_bronze_customers.sql` … `06_monitoreo_ejecuciones.sql` | Crean las 6 tablas (`CREATE TABLE IF NOT EXISTS`), con comentarios y la PII marcada | 2 · Despliegue del modelo |
+| `sql/contrato_modelo.json` | Tablas, columnas y tipos esperados | 1 (test) y 2 (verificación) |
+| `data/reference/paises.csv` | Código, nombre y región de cada país | 1 (regla `pais_desconocido`) y 2 (carga de `ref_paises`) |
+| `sql/permisos.sql` | `GRANT` por grupo según la matriz de acceso. **No lo ejecuta el pipeline**, porque en Free Edition no existen los grupos | — (manual, en un workspace real) |
+
+Variables de entorno opcionales, que no son secretos: `DATABRICKS_CATALOG` (por defecto `workspace`) y `DATABRICKS_SCHEMA` (por defecto `demo`).
+
+### Correr las pruebas en local
+
+```bash
+python -m venv .venv
+```
+
+```bash
+.venv/Scripts/python -m pip install -r requirements.txt
+```
+
+(En macOS o Linux, usa `.venv/bin/python` en lugar de `.venv/Scripts/python`.)
+
+```bash
+.venv/Scripts/python -m pytest
+```
+
+```bash
+.venv/Scripts/python scripts/validar_csv.py
+```
+
+El despliegue (`desplegar_modelo.py`) está pensado para correr en GitHub Actions con los secrets. Para correrlo en local tendrías que exportar las 3 variables en tu terminal: nunca las guardes en un archivo del repo.
+
 ## Preguntas frecuentes
 
 **¿Tengo que usar Databricks?** No. Si cambias de plataforma, actualiza `constitucion/stack-tecnologico.md` y las specs de cada feature siguen sirviendo.

@@ -10,3 +10,6 @@ __pycache__/
 
 # Logs
 *.log
+
+# Tests
+.pytest_cache/

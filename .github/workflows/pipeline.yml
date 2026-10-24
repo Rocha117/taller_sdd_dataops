@@ -1,0 +1,66 @@
+# Pipeline de ClientesConfiables · Fase 1
+# Stages: 1 · Calidad shift-left  →  2 · Despliegue del modelo
+# Spec: specs/2026-10-23-fase-1-diseno-shift-left/
+
+name: Pipeline ClientesConfiables
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# PRs y ejecuciones manuales comparten el schema workspace.demo: nunca dos a la vez.
+concurrency:
+  group: databricks-workspace-demo
+  cancel-in-progress: false
+
+jobs:
+  calidad-shift-left:
+    name: Calidad shift-left
+    runs-on: ubuntu-latest
+    # Sin secrets: este stage no toca Databricks.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Tests automáticos
+        run: pytest
+
+      - name: Validar customers.csv
+        run: python scripts/validar_csv.py
+
+  despliegue-modelo:
+    name: Despliegue del modelo
+    needs: calidad-shift-left
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Crear tablas, cargar ref_paises y verificar el contrato
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: python scripts/desplegar_modelo.py
