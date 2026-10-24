@@ -114,3 +114,57 @@ def test_reporte_se_escribe_en_el_resumen_del_job(tmp_path, monkeypatch):
     contenido = resumen.read_text(encoding="utf-8")
     assert "## Calidad shift-left" in contenido
     assert "| 11 | C010 | duplicado |" in contenido
+
+
+# --- Fase 2: umbral de rechazo y métricas ---
+
+import json
+
+ENCABEZADO = "customer_id,name,age,country,email\n"
+
+
+def test_mayoria_con_error_bloquea(capsys):
+    assert vc.main([str(FIXTURES / "mayoria_con_error.csv")]) == 1
+    salida = capsys.readouterr().out
+    assert "::error" in salida
+    assert "umbral de 50 %" in salida
+    assert "@" not in salida
+
+
+def test_limite_exacto_de_50_por_ciento_bloquea(tmp_path):
+    ruta = tmp_path / "mitad.csv"
+    ruta.write_text(ENCABEZADO + "C001,Ana,34,PE,ana@mail.com\nC002,,28,PE,luis@mail.com\n", encoding="utf-8")
+    assert vc.validar(ruta, vc.PAISES_POR_DEFECTO).supera_umbral
+    assert vc.main([str(ruta)]) == 1
+
+
+def test_justo_debajo_del_umbral_solo_advierte(tmp_path):
+    ruta = tmp_path / "casi.csv"
+    filas = "C001,Ana,34,PE,a@mail.com\nC002,Luis,28,PE,l@mail.com\nC003,,41,CL,s@mail.com\n"
+    ruta.write_text(ENCABEZADO + filas, encoding="utf-8")
+    assert vc.main([str(ruta)]) == 0
+
+
+def test_reporte_indica_el_umbral():
+    reporte = vc.generar_reporte(vc.validar(vc.CSV_POR_DEFECTO, vc.PAISES_POR_DEFECTO))
+    assert "se bloquea con 50 % o más" in reporte
+    assert "Fase 1" not in reporte
+
+
+def test_publica_las_metricas_del_stage(tmp_path, monkeypatch):
+    salida = tmp_path / "output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(salida))
+    vc.main([])
+    datos = json.loads(salida.read_text(encoding="utf-8").split("metricas=", 1)[1])
+    assert datos["stage"] == "shift_left"
+    assert datos["estado"] == "advertencia"
+    assert (datos["filas_entrada"], datos["filas_salida"], datos["filas_rechazadas"]) == (21, 12, 9)
+    assert "@" not in datos["mensaje"]
+
+
+def test_metricas_de_fallo_estructural(tmp_path, monkeypatch):
+    salida = tmp_path / "output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(salida))
+    vc.main([str(FIXTURES / "vacio.csv")])
+    datos = json.loads(salida.read_text(encoding="utf-8").split("metricas=", 1)[1])
+    assert datos["estado"] == "fallo"

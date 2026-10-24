@@ -1,0 +1,5 @@
+customer_id,name,age,country,email
+C001,Ana Torres,34,PE,ana.torres@mail.com
+C002,,28,PE,luis@mail.com
+C003,Carla Mendoza,abc,MX,carla@mail.com
+C004,Pedro Huamán,39,,pedro@mail.com

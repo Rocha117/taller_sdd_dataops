@@ -21,6 +21,9 @@ MAYORIA_DE_EDAD = 18
 
 SEPARADOR_MOTIVOS = "; "
 
+# Con este % de filas con error o más, fallan el stage 1 (shift-left) y el stage 4 (calidad).
+UMBRAL_RECHAZO_PCT = 50
+
 # Motivos en el orden en que se registran cuando una fila tiene varios.
 CUSTOMER_ID_VACIO = "customer_id_vacio"
 NOMBRE_VACIO = "nombre_vacio"
@@ -141,6 +144,15 @@ def evaluar_filas(filas: Iterable[Mapping[str, str | None]], paises: set[str]) -
         resultados.append(ResultadoFila(numero, customer_id, tuple(motivos), es_menor))
 
     return resultados
+
+
+def pct_rechazo(rechazadas: int, total: int) -> float:
+    return rechazadas / total * 100 if total else 0.0
+
+
+def supera_umbral(rechazadas: int, total: int) -> bool:
+    """True si las filas rechazadas llegan al UMBRAL_RECHAZO_PCT (comparación exacta, sin decimales)."""
+    return total > 0 and rechazadas * 100 >= UMBRAL_RECHAZO_PCT * total
 
 
 def cargar_paises(ruta: Path) -> set[str]:

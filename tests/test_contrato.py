@@ -22,16 +22,17 @@ def columnas_de_ddl(texto):
     return columnas
 
 
+ARCHIVOS_CREATE = [r for r in dm.archivos_ddl() if _TABLA.search(r.read_text(encoding="utf-8"))]
+ARCHIVOS_ALTER = [r for r in dm.archivos_ddl() if r not in ARCHIVOS_CREATE]
 DDL = {
     _TABLA.search(ruta.read_text(encoding="utf-8")).group(1): ruta.read_text(encoding="utf-8")
-    for ruta in dm.archivos_ddl()
+    for ruta in ARCHIVOS_CREATE
 }
 CONTRATO = dm.leer_contrato()
 
 
-def test_hay_seis_ddl_en_orden():
-    nombres = [r.name for r in dm.archivos_ddl()]
-    assert nombres == [
+def test_ddl_en_orden_create_primero_y_alter_despues():
+    assert [r.name for r in ARCHIVOS_CREATE] == [
         "01_bronze_customers.sql",
         "02_silver_customers.sql",
         "03_rechazados_customers.sql",
@@ -39,6 +40,25 @@ def test_hay_seis_ddl_en_orden():
         "05_gold_contactables_pais.sql",
         "06_monitoreo_ejecuciones.sql",
     ]
+    assert [r.name for r in ARCHIVOS_ALTER] == ["07_comentario_stage_monitoreo.sql"]
+    assert dm.archivos_ddl() == ARCHIVOS_CREATE + ARCHIVOS_ALTER
+
+
+def test_ningun_script_sql_tiene_drop():
+    for ruta in sorted((dm.RAIZ / "sql").rglob("*.sql")):
+        assert "DROP " not in ruta.read_text(encoding="utf-8").upper(), ruta.name
+
+
+def test_alter_solo_cambia_comentarios():
+    for ruta in ARCHIVOS_ALTER:
+        sentencia = dm.preparar_sentencia(ruta.read_text(encoding="utf-8"))
+        assert sentencia.count("ALTER TABLE {{catalog}}.{{schema}}.") == 1
+        assert "COMMENT '" in sentencia
+        assert "ADD COLUMN" not in sentencia.upper() and "TYPE" not in sentencia.upper()
+
+
+def test_merge_de_paises_es_condicional():
+    assert "WHEN MATCHED AND (t.country_name <> s.country_name OR t.region <> s.region)" in dm.SQL_MERGE_PAIS
 
 
 def test_contrato_y_ddl_tienen_las_mismas_tablas():
@@ -77,7 +97,7 @@ def test_gold_no_tiene_emails():
 
 
 def test_cada_ddl_tiene_una_sola_sentencia():
-    for ruta in dm.archivos_ddl():
+    for ruta in ARCHIVOS_CREATE:
         sentencia = dm.preparar_sentencia(ruta.read_text(encoding="utf-8"))
         assert not sentencia.endswith(";")
         assert sentencia.count("CREATE TABLE") == 1

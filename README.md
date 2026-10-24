@@ -206,23 +206,84 @@ Columnas: `customer_id`, `name`, `age`, `country` (código de 2 letras), `email`
 
 El archivo trae a propósito algunos problemas de calidad (nombres vacíos, países vacíos, edades no numéricas, menores de edad, correos mal formados, duplicados). **No los corrijas a mano**: que tu spec diga qué hacer con ellos.
 
+## Listo para ejecutar
+
+El pipeline completo corre solo con esto:
+
+1. Haz **fork** de este repo y déjalo público (para que funcione la protección de `main`).
+2. En Databricks, con el SQL Warehouse en **Running**, ejecuta `CREATE SCHEMA IF NOT EXISTS demo;`.
+3. En GitHub, crea los 3 secrets: `DATABRICKS_HOST`, `DATABRICKS_HTTP_PATH` y `DATABRICKS_TOKEN` (ver paso 3).
+4. Abre un Pull Request hacia `main`, o ve a *Actions → Pipeline ClientesConfiables → Run workflow*.
+
+Las tablas se crean solas (stage 2) y se llenan de punta a punta (stages 3 a 5). Después, marca los 6 stages como checks obligatorios del ruleset de `main` (paso 3b).
+
 ## Scripts del pipeline
 
-Todo lo que corre el workflow [`.github/workflows/pipeline.yml`](.github/workflows/pipeline.yml). Se dispara en cada Pull Request hacia `main` y de forma manual (*Actions → Pipeline ClientesConfiables → Run workflow*). Spec: [`specs/2026-10-23-fase-1-diseno-shift-left/`](specs/2026-10-23-fase-1-diseno-shift-left/).
+Todo lo que corre el workflow [`.github/workflows/pipeline.yml`](.github/workflows/pipeline.yml). Specs: [Fase 1](specs/2026-10-23-fase-1-diseno-shift-left/) y [Fase 2](specs/2026-10-23-fase-2-pipeline-e2e/).
+
+```
+1 · Calidad shift-left → 2 · Despliegue del modelo → 3 · Ingesta a Bronze
+  → 4 · Calidad de datos → 5 · Gold → 6 · Monitoreo (corre siempre)
+```
 
 | Archivo | Qué hace | Stage |
 |---|---|---|
-| `scripts/validar_csv.py` | Valida `data/source/customers.csv` sin tocar Databricks. Bloquea si la estructura está mal (encabezado, UTF-8, archivo vacío, filas incompletas). Los errores por fila solo dan advertencia. Escribe el reporte en el resumen del job y nunca muestra emails | 1 · Calidad shift-left |
-| `scripts/reglas_calidad.py` | Reglas por fila y sus motivos (`nombre_vacio`, `email_invalido`, `duplicado`, etc.). Las usa `validar_csv.py`, y en la Fase 2 el stage de calidad | 1 · Calidad shift-left |
-| `tests/` | Tests de pytest: reglas, chequeos estructurales con `tests/fixtures/`, contrato vs. DDL y manejo de secrets | 1 · Calidad shift-left |
-| `scripts/desplegar_modelo.py` | Ejecuta `sql/ddl/` en orden, carga `ref_paises` con un `MERGE` parametrizado y verifica el modelo contra `sql/contrato_modelo.json` | 2 · Despliegue del modelo |
-| `scripts/db.py` | Conexión a Databricks con los 3 secrets, destino (`workspace.demo` por defecto) y `run_id` | 2 · Despliegue del modelo |
-| `sql/ddl/01_bronze_customers.sql` … `06_monitoreo_ejecuciones.sql` | Crean las 6 tablas (`CREATE TABLE IF NOT EXISTS`), con comentarios y la PII marcada | 2 · Despliegue del modelo |
+| `scripts/validar_csv.py` | Valida `data/source/customers.csv` sin tocar Databricks. **Bloquea** si la estructura está mal o si el 50 % o más de las filas tiene errores; por debajo, solo advierte. Nunca muestra emails | 1 · Calidad shift-left |
+| `scripts/reglas_calidad.py` | Las reglas por fila, sus motivos y el umbral de 50 %. Una sola fuente de verdad para los stages 1 y 4 | 1 y 4 |
+| `tests/` | Tests de pytest de todos los scripts, con un cursor falso: no se conectan a Databricks | 1 · Calidad shift-left |
+| `scripts/desplegar_modelo.py` | Ejecuta `sql/ddl/` en orden, carga `ref_paises` con un `MERGE` que solo actualiza si algo cambió, y verifica el modelo contra `sql/contrato_modelo.json` | 2 · Despliegue del modelo |
+| `sql/ddl/01_…06_*.sql` | Crean las 6 tablas (`CREATE TABLE IF NOT EXISTS`), con comentarios y la PII marcada | 2 · Despliegue del modelo |
+| `sql/ddl/07_comentario_stage_monitoreo.sql` | Cambio posterior del modelo (solo un comentario). Los cambios futuros van en scripts nuevos numerados | 2 · Despliegue del modelo |
 | `sql/contrato_modelo.json` | Tablas, columnas y tipos esperados | 1 (test) y 2 (verificación) |
-| `data/reference/paises.csv` | Código, nombre y región de cada país | 1 (regla `pais_desconocido`) y 2 (carga de `ref_paises`) |
-| `sql/permisos.sql` | `GRANT` por grupo según la matriz de acceso. **No lo ejecuta el pipeline**, porque en Free Edition no existen los grupos | — (manual, en un workspace real) |
+| `data/reference/paises.csv` | Código, nombre y región de cada país | 1 y 2 |
+| `scripts/ingestar_bronze.py` | Carga el CSV **crudo** en `bronze_customers`, con `_run_id`, archivo y número de fila. Falla si el conteo no cuadra | 3 · Ingesta a Bronze |
+| `scripts/calidad_datos.py` | Aplica las reglas: los válidos van a `silver_customers` (normalizados, con `es_mayor_edad` y `es_contactable`) y los errores a `rechazados_customers`, con el registro original y el motivo. Con 50 % o más falla y no toca Silver | 4 · Calidad de datos |
+| `sql/transformaciones/gold_contactables_pais.sql` | Indicador de contactables por país, con nombre y región. `ZZ` · "Sin país" para clientes sin país válido | 5 · Gold |
+| `scripts/calcular_gold.py` | Ejecuta el SQL de Gold, comprueba que cuadre con Bronze y Silver y muestra el KPI contra la meta del 80 % | 5 · Gold |
+| `scripts/registrar_monitoreo.py` | Escribe en `monitoreo_ejecuciones` una fila por stage (6 por ejecución), también si alguno falló o no corrió | 6 · Monitoreo |
+| `scripts/metricas.py` | Cada stage publica sus métricas (estado, filas, horas) para el monitoreo | 1 a 5 |
+| `scripts/db.py` | Conexión a Databricks con los 3 secrets, destino (`workspace.demo` por defecto) y `run_id` | 2 a 6 |
+| `sql/permisos.sql` | `GRANT` por grupo según la matriz de acceso. **No lo ejecuta el pipeline**: en Free Edition no existen los grupos | — (manual, en un workspace real) |
 
-Variables de entorno opcionales, que no son secretos: `DATABRICKS_CATALOG` (por defecto `workspace`) y `DATABRICKS_SCHEMA` (por defecto `demo`).
+Variables opcionales (no son secretos): `DATABRICKS_CATALOG` (por defecto `workspace`) y `DATABRICKS_SCHEMA` (por defecto `demo`).
+
+### Cuándo corre
+
+| Disparador | Rama | Para qué |
+|---|---|---|
+| Pull Request hacia `main` | La rama de la fase | Probar todo antes del merge |
+| Lunes 6:00 a. m. hora de Lima (`cron: "0 11 * * 1"`, UTC) | `main` | Gold actualizada antes de las 8:00 |
+| Manual: *Actions → Pipeline ClientesConfiables → Run workflow* | La que elijas | Recargar cuando haga falta |
+
+- **El schedule se apaga solo:** en repos públicos, GitHub desactiva los workflows programados después de **60 días sin actividad** en el repo. Para reactivarlo: *Actions → Pipeline ClientesConfiables → Enable workflow*.
+- **Alertas:** si el workflow falla, GitHub avisa por correo. En la carga programada avisa a quien modificó el `cron` por última vez.
+- **Re-run:** *Re-run all jobs* es una ejecución nueva, con un `run_id` nuevo y su propia tanda en Bronze, rechazados y monitoreo. *Re-run failed jobs* reutiliza el `run_id` de la ingesta, así calidad y Gold leen la carga correcta.
+
+### Cómo consultar el resultado
+
+Todas las fechas están en **UTC**. Para verlas en hora de Lima: `from_utc_timestamp(col, 'America/Lima')`.
+
+```sql
+-- Indicador por país (lo que usa BI)
+SELECT * FROM workspace.demo.gold_contactables_pais ORDER BY country_code;
+```
+
+```sql
+-- Lista de contacto para Marketing (incluye emails: acceso restringido)
+SELECT customer_id, name, email, country_code FROM workspace.demo.silver_customers WHERE es_contactable;
+```
+
+```sql
+-- Qué corregir en el CRM
+SELECT _row_number, customer_id, motivo FROM workspace.demo.rechazados_customers
+WHERE _run_id = (SELECT MAX(_run_id) FROM workspace.demo.silver_customers) ORDER BY _row_number;
+```
+
+```sql
+-- Estado de las últimas ejecuciones
+SELECT run_id, stage, estado, mensaje, from_utc_timestamp(started_at, 'America/Lima') AS inicio_lima
+FROM workspace.demo.monitoreo_ejecuciones ORDER BY started_at DESC LIMIT 30;
+```
 
 ### Correr las pruebas en local
 
@@ -244,7 +305,7 @@ python -m venv .venv
 .venv/Scripts/python scripts/validar_csv.py
 ```
 
-El despliegue (`desplegar_modelo.py`) está pensado para correr en GitHub Actions con los secrets. Para correrlo en local tendrías que exportar las 3 variables en tu terminal: nunca las guardes en un archivo del repo.
+Los stages 2 a 6 están pensados para correr en GitHub Actions con los secrets. Para correrlos en local tendrías que exportar las 3 variables en tu terminal: nunca las guardes en un archivo del repo.
 
 ## Preguntas frecuentes
 
