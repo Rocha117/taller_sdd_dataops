@@ -1,18 +1,21 @@
-# Pipeline de ClientesConfiables · Fase 1
-# Stages: 1 · Calidad shift-left  →  2 · Despliegue del modelo
-# Spec: specs/2026-10-23-fase-1-diseno-shift-left/
+# Pipeline de ClientesConfiables
+# 1 · Calidad shift-left → 2 · Despliegue del modelo → 3 · Ingesta a Bronze
+#   → 4 · Calidad de datos → 5 · Gold → 6 · Monitoreo (corre siempre)
+# Specs: specs/2026-10-23-fase-1-diseno-shift-left/ y specs/2026-10-23-fase-2-pipeline-e2e/
 
 name: Pipeline ClientesConfiables
 
 on:
   pull_request:
     branches: [main]
+  schedule:
+    - cron: "0 11 * * 1" # lunes 6:00 a. m. hora de Lima (UTC-5), 2 h antes de las 8:00
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# PRs y ejecuciones manuales comparten el schema workspace.demo: nunca dos a la vez.
+# PRs, carga programada y ejecuciones manuales comparten workspace.demo: nunca dos a la vez.
 concurrency:
   group: databricks-workspace-demo
   cancel-in-progress: false
@@ -22,45 +25,130 @@ jobs:
     name: Calidad shift-left
     runs-on: ubuntu-latest
     # Sin secrets: este stage no toca Databricks.
+    outputs:
+      metricas: ${{ steps.validar.outputs.metricas }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Python 3.11
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
-
       - name: Instalar dependencias
         run: pip install -r requirements.txt
-
       - name: Tests automáticos
         run: pytest
-
       - name: Validar customers.csv
+        id: validar
         run: python scripts/validar_csv.py
 
   despliegue-modelo:
     name: Despliegue del modelo
     needs: calidad-shift-left
     runs-on: ubuntu-latest
+    outputs:
+      metricas: ${{ steps.desplegar.outputs.metricas }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Python 3.11
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
-
       - name: Instalar dependencias
         run: pip install -r requirements.txt
-
       - name: Crear tablas, cargar ref_paises y verificar el contrato
+        id: desplegar
         env:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
         run: python scripts/desplegar_modelo.py
+
+  ingesta-bronze:
+    name: Ingesta a Bronze
+    needs: despliegue-modelo
+    runs-on: ubuntu-latest
+    outputs:
+      metricas: ${{ steps.ingestar.outputs.metricas }}
+      run_id: ${{ steps.ingestar.outputs.run_id }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+      - name: Cargar customers.csv crudo en bronze_customers
+        id: ingestar
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: python scripts/ingestar_bronze.py
+
+  calidad-datos:
+    name: Calidad de datos
+    needs: ingesta-bronze
+    runs-on: ubuntu-latest
+    outputs:
+      metricas: ${{ steps.calidad.outputs.metricas }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+      - name: Válidos a Silver y errores a rechazados
+        id: calidad
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          RUN_ID: ${{ needs.ingesta-bronze.outputs.run_id }}
+        run: python scripts/calidad_datos.py
+
+  gold:
+    name: Gold
+    needs: [ingesta-bronze, calidad-datos]
+    runs-on: ubuntu-latest
+    outputs:
+      metricas: ${{ steps.gold.outputs.metricas }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+      - name: Indicador de contactables por país
+        id: gold
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          RUN_ID: ${{ needs.ingesta-bronze.outputs.run_id }}
+        run: python scripts/calcular_gold.py
+
+  monitoreo:
+    name: Monitoreo
+    needs: [calidad-shift-left, despliegue-modelo, ingesta-bronze, calidad-datos, gold]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+      - name: Registrar cada stage en monitoreo_ejecuciones
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python scripts/registrar_monitoreo.py

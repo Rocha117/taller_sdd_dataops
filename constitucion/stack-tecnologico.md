@@ -25,8 +25,8 @@
 
 ## Lenguajes
 
-- **SQL** para crear tablas (DDL) y para las transformaciones Bronze → Silver → Gold.
-- **Python 3.11** para la validación shift-left, la ingesta del CSV, la ejecución de los scripts SQL y el registro de monitoreo. Dependencias mínimas: `databricks-sql-connector` y `pytest`. El CSV se lee con la librería estándar `csv`.
+- **SQL** para crear tablas (DDL) y para la transformación Silver → Gold.
+- **Python 3.11** para la validación shift-left, la ingesta del CSV, las reglas de calidad Bronze → Silver + rechazados (`scripts/reglas_calidad.py`, única fuente de verdad de las reglas, la misma que usa el shift-left), la ejecución de los scripts SQL y el registro de monitoreo. Dependencias mínimas: `databricks-sql-connector` y `pytest`. El CSV se lee con la librería estándar `csv`.
 
 ## Arquitectura medallion
 
@@ -127,7 +127,7 @@ Las columnas que empiezan con `_` son técnicas, de trazabilidad.
 | Columna | Tipo | Nota |
 |---|---|---|
 | `run_id` | STRING | |
-| `stage` | STRING | `shift_left`, `despliegue_modelo`, `bronze`, `calidad`, `gold` |
+| `stage` | STRING | `shift_left`, `despliegue_modelo`, `bronze`, `calidad`, `gold`, `monitoreo` |
 | `estado` | STRING | `exito`, `advertencia`, `fallo` |
 | `filas_entrada` | BIGINT | |
 | `filas_salida` | BIGINT | |
@@ -159,7 +159,7 @@ Un solo workflow de GitHub Actions con un job por stage, encadenados: si un stag
 | 3 | **Ingesta a Bronze** | Inserta el CSV crudo con el `run_id` de la ejecución | Sí | La carga falla o las filas cargadas no coinciden con las del archivo |
 | 4 | **Calidad de datos** | Válidos → Silver; con error → rechazados, con motivo | Sí | Rechazos **≥ 50 %** de las filas leídas (con al menos 1 rechazo queda como advertencia) |
 | 5 | **Gold** | Calcula el indicador por país con nombre y región, solo mayores de edad como contactables | Sí | El cálculo falla |
-| 6 | **Monitoreo** | Cada stage escribe su fila en `monitoreo_ejecuciones`, también cuando falla | Sí | — (nunca oculta el fallo del stage) |
+| 6 | **Monitoreo** | Cada stage publica sus métricas; este job corre siempre (también si algo falla) y escribe en `monitoreo_ejecuciones` una fila por stage, incluida la suya | Sí | Algún stage no terminó en verde o no se pudo escribir el registro (nunca oculta el fallo de un stage) |
 
 ### Cuándo corre
 

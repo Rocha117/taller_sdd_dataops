@@ -2,7 +2,8 @@
 
 Valida data/source/customers.csv en el runner, antes de tocar Databricks:
 - Chequeos estructurales: si alguno falla, termina con código 1 y bloquea el PR.
-- Reglas por fila (reglas_calidad.py): solo se reportan como advertencia.
+- Reglas por fila (reglas_calidad.py): con UMBRAL_RECHAZO_PCT (50 %) o más de filas
+  con error, también bloquea; por debajo, solo advierte.
 
 El reporte va al resumen del job (GITHUB_STEP_SUMMARY) o a la consola.
 Nunca muestra emails ni filas completas: solo número de fila, customer_id y motivos.
@@ -21,7 +22,17 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from reglas_calidad import COLUMNAS, MOTIVOS, ResultadoFila, cargar_paises, evaluar_filas
+import metricas
+from reglas_calidad import (
+    COLUMNAS,
+    MOTIVOS,
+    UMBRAL_RECHAZO_PCT,
+    ResultadoFila,
+    cargar_paises,
+    evaluar_filas,
+    pct_rechazo,
+    supera_umbral,
+)
 
 RAIZ = Path(__file__).resolve().parents[1]
 CSV_POR_DEFECTO = RAIZ / "data" / "source" / "customers.csv"
@@ -51,7 +62,11 @@ class ResultadoValidacion:
 
     @property
     def pct_filas_con_error(self) -> float:
-        return len(self.filas_con_error) / self.total_filas * 100 if self.total_filas else 0.0
+        return pct_rechazo(len(self.filas_con_error), self.total_filas)
+
+    @property
+    def supera_umbral(self) -> bool:
+        return supera_umbral(len(self.filas_con_error), self.total_filas)
 
     @property
     def menores_de_edad(self) -> list[ResultadoFila]:
@@ -106,8 +121,7 @@ def validar(ruta_csv: Path, ruta_paises: Path) -> ResultadoValidacion:
     return ResultadoValidacion(filas=evaluar_filas(filas, cargar_paises(ruta_paises)))
 
 
-def _pct(valor: float) -> str:
-    return f"{valor:.2f}".replace(".", ",") + " %"
+_pct = metricas.pct_texto
 
 
 def generar_reporte(resultado: ResultadoValidacion) -> str:
@@ -121,6 +135,13 @@ def generar_reporte(resultado: ResultadoValidacion) -> str:
 
     lineas += [
         "✅ Chequeos estructurales correctos.",
+        "",
+        (
+            f"❌ **{_pct(resultado.pct_filas_con_error)} de filas con error: llega al umbral de "
+            f"{UMBRAL_RECHAZO_PCT} % y bloquea el Pull Request.**"
+            if resultado.supera_umbral
+            else f"Umbral: el Pull Request se bloquea con {UMBRAL_RECHAZO_PCT} % o más de filas con error."
+        ),
         "",
         "| Métrica | Valor |",
         "|---|---|",
@@ -140,7 +161,7 @@ def generar_reporte(resultado: ResultadoValidacion) -> str:
     if resultado.filas_con_error:
         lineas += [
             "",
-            "### Filas con error (advertencia: en la Fase 1 no bloquean)",
+            "### Filas con error",
             "",
             "| Fila | customer_id | Motivos |",
             "|---|---|---|",
@@ -178,21 +199,37 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--paises", type=Path, default=PAISES_POR_DEFECTO)
     args = parser.parse_args(argv)
 
-    resultado = validar(args.csv, args.paises)
-    publicar_reporte(generar_reporte(resultado))
+    with metricas.registrar("shift_left") as m:
+        resultado = validar(args.csv, args.paises)
+        publicar_reporte(generar_reporte(resultado))
 
-    if not resultado.ok:
-        for error in resultado.errores_estructurales:
-            print(f"::error title=Calidad shift-left::{error}")
-        return 1
+        if not resultado.ok:
+            for error in resultado.errores_estructurales:
+                print(f"::error title=Calidad shift-left::{error}")
+            m.fallar("Chequeos estructurales fallidos: " + " ".join(resultado.errores_estructurales))
+            return 1
 
-    if resultado.filas_con_error:
-        print(
-            "::warning title=Calidad shift-left::"
-            f"{len(resultado.filas_con_error)} de {resultado.total_filas} filas tienen errores "
-            f"de calidad ({_pct(resultado.pct_filas_con_error)}). Detalle en el resumen del job."
+        con_error = len(resultado.filas_con_error)
+        m.filas_entrada = resultado.total_filas
+        m.filas_salida = resultado.total_filas - con_error
+        m.filas_rechazadas = con_error
+        resumen = (
+            f"{con_error} de {resultado.total_filas} filas tienen errores "
+            f"de calidad ({_pct(resultado.pct_filas_con_error)})"
         )
-    return 0
+
+        if resultado.supera_umbral:
+            print(
+                f"::error title=Calidad shift-left::{resumen}: llega al umbral de "
+                f"{UMBRAL_RECHAZO_PCT} %. Se bloquea antes de tocar Databricks."
+            )
+            m.fallar(f"{resumen}; umbral {UMBRAL_RECHAZO_PCT} %")
+            return 1
+
+        if con_error:
+            print(f"::warning title=Calidad shift-left::{resumen}. Detalle en el resumen del job.")
+            m.advertir(resumen)
+        return 0
 
 
 if __name__ == "__main__":

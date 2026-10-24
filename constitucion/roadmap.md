@@ -52,7 +52,7 @@
 - Stage **3 · Ingesta a Bronze**: el CSV crudo con `run_id`, archivo de origen y número de fila.
 - Stage **4 · Calidad de datos**: registros válidos a Silver (con `es_mayor_edad` y `es_contactable`) y registros con error a `rechazados_customers` con el registro original y el motivo. Falla con **50 % o más** de rechazos; con al menos uno queda como advertencia.
 - Stage **5 · Gold**: `gold_contactables_pais` con nombre del país y región, solo mayores de edad como contactables, sin emails.
-- Stage **6 · Monitoreo**: cada stage (incluidos los de la Fase 1) escribe su fila en `monitoreo_ejecuciones`, también cuando falla.
+- Stage **6 · Monitoreo**: cada stage (incluidos los de la Fase 1) publica sus métricas, y un job final que corre siempre las escribe en `monitoreo_ejecuciones` (una fila por stage), también cuando algo falla.
 - Shift-left ampliado: aplica las mismas reglas por fila que el stage de calidad y bloquea el PR si los rechazos proyectados llegan al 50 %, antes de tocar Databricks.
 - Carga programada los lunes a las 6:00 a. m. hora de Lima y ejecución manual.
 - Idempotencia comprobada: correr dos veces el pipeline no duplica datos.
